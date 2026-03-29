@@ -47,36 +47,18 @@ def get_pasted_json():
 def main():
     print("=== Schema Definition Gatekeeper ===")
     
-    # Logic: If file exists, offer to validate it. Otherwise, force paste.
     if os.path.exists(INITIAL_SCHEMA_FILE):
-        print(f"[!] Existing '{INITIAL_SCHEMA_FILE}' found.")
-        choice = input("Use/Validate existing file (1) or Overwrite with new Paste (2)? [1/2]: ").strip()
-    else:
-        print(f"[*] '{INITIAL_SCHEMA_FILE}' not found. Moving to Paste Mode...")
-        choice = '2'
-
-    schema = None
-
-    if choice == '1':
+        print(f"[!] Existing '{INITIAL_SCHEMA_FILE}' found. Validating...")
         try:
             with open(INITIAL_SCHEMA_FILE, 'r') as f:
                 schema = json.load(f)
             validate_structure(schema)
-            print(f"[+] Existing file is valid.")
+            print("[+] Existing schema file is valid.")
+            return True
         except Exception as e:
-            print(f"[X] Existing file is invalid: {e}")
-            if input("Retry with Paste Mode? (y/n): ").lower() == 'y':
-                schema = get_pasted_json()
+            raise Exception(f"Existing '{INITIAL_SCHEMA_FILE}' is invalid: {e}")
     else:
-        schema = get_pasted_json()
-
-    if schema:
-        with open(INITIAL_SCHEMA_FILE, "w") as f:
-            json.dump(schema, f, indent=4)
-        print(f"\n[SUCCESS] {INITIAL_SCHEMA_FILE} finalized.")
-    else:
-        print("\n[!] No valid schema provided.")
-        sys.exit(1) # Exit with error so main.py knows to stop
+        raise FileNotFoundError(f"'{INITIAL_SCHEMA_FILE}' not found. Required for initialization.")
 
 if __name__ == "__main__":
     main()

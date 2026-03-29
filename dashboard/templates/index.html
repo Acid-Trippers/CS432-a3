@@ -1,0 +1,572 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hybrid DB Pipeline Dashboard</title>
+  <meta name="description" content="Real-time status and query interface for the hybrid PostgreSQL/MongoDB pipeline." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    /* ── Design tokens ─────────────────────────────────────────────── */
+    :root {
+      --bg:         #0d0f17;
+      --surface:    #161924;
+      --surface-2:  #1e2230;
+      --border:     #2a2f42;
+      --text:       #e2e5f0;
+      --text-muted: #7b82a0;
+      --accent:     #5b6ef5;
+      --accent-glow:#5b6ef530;
+      --green:      #3dd68c;
+      --red:        #f55b5b;
+      --yellow:     #f5c842;
+      --radius:     12px;
+      --transition: 0.22s cubic-bezier(.4,0,.2,1);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      font-size: 15px;
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    /* ── Layout ────────────────────────────────────────────────────── */
+    header {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      padding: 22px 36px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+
+    header .logo {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), #8b5cf6);
+      border-radius: 9px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px;
+    }
+
+    header h1 {
+      font-size: 1.1rem;
+      font-weight: 600;
+      letter-spacing: -.3px;
+    }
+
+    header .subtitle {
+      color: var(--text-muted);
+      font-size: .82rem;
+      margin-left: auto;
+    }
+
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 36px 24px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      grid-template-rows: auto auto;
+      gap: 24px;
+    }
+
+    /* ── Card ──────────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color var(--transition);
+    }
+
+    .card:hover { border-color: #3a4060; }
+
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px;
+    }
+
+    .card-title {
+      font-weight: 600; font-size: .95rem; letter-spacing: -.2px;
+      display: flex; align-items: center; gap: 8px;
+    }
+
+    .card-title .icon { font-size: 1.1rem; }
+
+    /* ── Status Badge ──────────────────────────────────────────────── */
+    .badge {
+      font-size: .72rem;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 20px;
+      letter-spacing: .4px;
+      text-transform: uppercase;
+    }
+
+    .badge--ok      { background: #3dd68c22; color: var(--green); border: 1px solid #3dd68c44; }
+    .badge--err     { background: #f55b5b22; color: var(--red);   border: 1px solid #f55b5b44; }
+    .badge--loading { background: #f5c84222; color: var(--yellow); border: 1px solid #f5c84244; }
+
+    /* ── Stat Row ──────────────────────────────────────────────────── */
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .stat-box {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px 16px;
+    }
+
+    .stat-box .label { color: var(--text-muted); font-size: .75rem; text-transform: uppercase; letter-spacing: .6px; }
+    .stat-box .value { font-size: 1.7rem; font-weight: 700; margin-top: 2px; font-variant-numeric: tabular-nums; }
+
+    /* ── Table List ────────────────────────────────────────────────── */
+    .table-list { width: 100%; border-collapse: collapse; font-size: .83rem; }
+    .table-list th {
+      text-align: left; color: var(--text-muted); font-weight: 500;
+      padding: 6px 10px; border-bottom: 1px solid var(--border);
+      letter-spacing: .4px; font-size: .72rem; text-transform: uppercase;
+    }
+    .table-list td { padding: 7px 10px; border-bottom: 1px solid var(--border); }
+    .table-list tr:last-child td { border-bottom: none; }
+    .table-list .count { color: var(--accent); font-family: 'JetBrains Mono', monospace; font-size: .82rem; }
+    .table-list .name  { color: var(--text-muted); font-family: 'JetBrains Mono', monospace; }
+
+    .empty-msg { color: var(--text-muted); font-size: .83rem; padding: 8px 0; }
+
+    /* ── Refresh Button ────────────────────────────────────────────── */
+    .btn-icon {
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+      border-radius: 7px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font-size: .85rem;
+      transition: all var(--transition);
+      display: flex; align-items: center; gap: 5px;
+    }
+    .btn-icon:hover { border-color: var(--accent); color: var(--text); background: var(--accent-glow); }
+    .btn-icon.spinning { animation: spin .7s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Query Panel (spans 2 cols) ────────────────────────────────── */
+    .query-panel { grid-column: 1 / -1; }
+
+    .query-body {
+      display: grid;
+      grid-template-columns: 2.2fr 1fr 1fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    label.field-label {
+      display: block;
+      color: var(--text-muted);
+      font-size: .75rem;
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    textarea, select, input[type="text"] {
+      width: 100%;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .82rem;
+      resize: vertical;
+      outline: none;
+      transition: border-color var(--transition), box-shadow var(--transition);
+    }
+    textarea:focus, select:focus, input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .query-actions {
+      display: flex; gap: 10px; margin-top: 14px; align-items: center;
+    }
+
+    .btn-primary {
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: #fff;
+      padding: 9px 22px;
+      font-size: .88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all var(--transition);
+      display: flex; align-items: center; gap: 7px;
+    }
+    .btn-primary:hover { background: #6d7ef7; box-shadow: 0 4px 18px #5b6ef540; }
+    .btn-primary:active { transform: scale(.97); }
+    .btn-primary:disabled { opacity: .45; cursor: not-allowed; }
+
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      padding: 9px 16px;
+      font-size: .85rem;
+      cursor: pointer;
+      transition: all var(--transition);
+    }
+    .btn-ghost:hover { border-color: var(--accent); color: var(--text); }
+
+    /* ── Result Box ────────────────────────────────────────────────── */
+    #result-box {
+      grid-column: 1 / -1;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 14px;
+      min-height: 100px;
+      max-height: 340px;
+      overflow-y: auto;
+      display: none;
+    }
+
+    #result-box pre {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: .8rem;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    #result-box.ok   { border-color: #3dd68c44; }
+    #result-box.err  { border-color: #f55b5b44; }
+
+    .result-bar {
+      display: flex; justify-content: space-between; align-items: center;
+      margin-bottom: 8px;
+    }
+    .result-label { font-size: .75rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+
+    /* ── Error text ────────────────────────────────────────────────── */
+    .error-text { color: var(--red); font-size: .82rem; }
+
+    /* ── Dot ───────────────────────────────────────────────────────── */
+    .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      display: inline-block;
+      margin-right: 4px;
+    }
+    .dot.green { background: var(--green); box-shadow: 0 0 6px var(--green); }
+    .dot.red   { background: var(--red);   box-shadow: 0 0 6px var(--red); }
+
+    /* ── Responsive ────────────────────────────────────────────────── */
+    @media (max-width: 720px) {
+      main { grid-template-columns: 1fr; }
+      .query-body { grid-template-columns: 1fr; }
+      header { padding: 16px 20px; }
+      main { padding: 20px 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">&#9889;</div>
+  <div>
+    <h1>Hybrid DB Pipeline Dashboard</h1>
+  </div>
+  <span class="subtitle">PostgreSQL &middot; MongoDB</span>
+</header>
+
+<main>
+
+  <!-- PostgreSQL Card -->
+  <div class="card" id="pg-card">
+    <div class="card-header">
+      <span class="card-title"><span class="icon">&#128024;</span> PostgreSQL</span>
+      <span class="badge badge--loading" id="pg-badge">Loading&hellip;</span>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="label">Total Records</div>
+        <div class="value" id="pg-total">&mdash;</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Tables</div>
+        <div class="value" id="pg-tables">&mdash;</div>
+      </div>
+    </div>
+    <table class="table-list" id="pg-table-list">
+      <thead><tr><th>Table</th><th>Rows</th></tr></thead>
+      <tbody><tr><td colspan="2" class="empty-msg">Fetching&hellip;</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- MongoDB Card -->
+  <div class="card" id="mongo-card">
+    <div class="card-header">
+      <span class="card-title"><span class="icon">&#127807;</span> MongoDB</span>
+      <span class="badge badge--loading" id="mongo-badge">Loading&hellip;</span>
+    </div>
+    <div class="stat-grid">
+      <div class="stat-box">
+        <div class="label">Total Documents</div>
+        <div class="value" id="mongo-total">&mdash;</div>
+      </div>
+      <div class="stat-box">
+        <div class="label">Collections</div>
+        <div class="value" id="mongo-cols">&mdash;</div>
+      </div>
+    </div>
+    <table class="table-list" id="mongo-col-list">
+      <thead><tr><th>Collection</th><th>Docs</th></tr></thead>
+      <tbody><tr><td colspan="2" class="empty-msg">Fetching&hellip;</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Query Panel -->
+  <div class="card query-panel">
+    <div class="card-header">
+      <span class="card-title"><span class="icon">&#128269;</span> Run a Query</span>
+      <button class="btn-icon" id="refresh-btn" title="Refresh stats">&#8635; Refresh Stats</button>
+    </div>
+
+    <div class="query-body">
+      <!-- Left: JSON editor -->
+      <div>
+        <label class="field-label" for="query-input">Query JSON</label>
+        <textarea id="query-input" rows="9" spellcheck="false" placeholder='{
+  "operation": "READ",
+  "entity": "main_records",
+  "filters": {},
+  "payload": {}
+}'></textarea>
+      </div>
+
+      <!-- Right: Quick templates -->
+      <div>
+        <label class="field-label">Quick Templates</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <button class="btn-ghost" id="tpl-read"   onclick="fillTemplate('read')">&#128214; READ all</button>
+          <button class="btn-ghost" id="tpl-create" onclick="fillTemplate('create')">&#9998; CREATE record</button>
+          <button class="btn-ghost" id="tpl-update" onclick="fillTemplate('update')">&#128260; UPDATE record</button>
+          <button class="btn-ghost" id="tpl-delete" onclick="fillTemplate('delete')">&#128465; DELETE record</button>
+        </div>
+      </div>
+
+      <!-- Third Column: Pipeline Actions -->
+      <div>
+        <label class="field-label">Pipeline Controls</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <select id="record-count" class="btn-ghost" style="text-align: left; padding: 9px 12px; margin-bottom: 4px; font-family: 'Inter', sans-serif;">
+            <option value="50">Count: 50</option>
+            <option value="100" selected>Count: 100</option>
+            <option value="500">Count: 500</option>
+            <option value="1000">Count: 1000</option>
+          </select>
+          <button class="btn-ghost" id="btn-init" onclick="runPipeline('initialise')">&#9889; Initialise Pipeline</button>
+          <button class="btn-ghost" id="btn-fetch" onclick="runPipeline('fetch')">&#128229; Fetch Records</button>
+        </div>
+      </div>
+
+      <!-- Result (full width inside grid) -->
+      <div id="result-box">
+        <div class="result-bar">
+          <span class="result-label" id="result-label">Result</span>
+          <button class="btn-ghost" style="padding:3px 10px;font-size:.75rem;" onclick="closeResult()">&#10005;</button>
+        </div>
+        <pre id="result-pre"></pre>
+      </div>
+    </div>
+
+    <div class="query-actions">
+      <button class="btn-primary" id="run-btn" onclick="runQuery()">
+        &#9654; Execute Query
+      </button>
+      <span id="query-status" style="font-size:.82rem;color:var(--text-muted);"></span>
+    </div>
+  </div>
+
+</main>
+
+<script>
+/* ── Stats ─────────────────────────────────────────────────────── */
+async function loadStats() {
+  const refreshBtn = document.getElementById('refresh-btn');
+  refreshBtn.classList.add('spinning');
+  try {
+    const res  = await fetch('/api/stats');
+    const data = await res.json();
+    renderSQL(data.postgresql);
+    renderMongo(data.mongodb);
+  } catch (e) {
+    setUnreachable('pg');
+    setUnreachable('mongo');
+  } finally {
+    refreshBtn.classList.remove('spinning');
+  }
+}
+
+function renderSQL(pg) {
+  const badge  = document.getElementById('pg-badge');
+  const total  = document.getElementById('pg-total');
+  const tables = document.getElementById('pg-tables');
+  const tbody  = document.querySelector('#pg-table-list tbody');
+
+  if (!pg.reachable) {
+    badge.className   = 'badge badge--err';
+    badge.innerHTML   = '<span class="dot red"></span>Unreachable';
+    total.textContent = '\u2014';
+    tables.textContent = '\u2014';
+    tbody.innerHTML   = '<tr><td colspan="2" class="error-text">' + (pg.error || 'Cannot connect to PostgreSQL') + '</td></tr>';
+    return;
+  }
+  badge.className = 'badge badge--ok';
+  badge.innerHTML = '<span class="dot green"></span>Connected';
+  total.textContent  = pg.total_records.toLocaleString();
+  const names        = Object.keys(pg.tables).sort();
+  tables.textContent = names.length;
+  tbody.innerHTML    = names.length
+    ? names.map(t => '<tr><td class="name">' + t + '</td><td class="count">' + pg.tables[t].toLocaleString() + '</td></tr>').join('')
+    : '<tr><td colspan="2" class="empty-msg">No tables — run the pipeline first.</td></tr>';
+}
+
+function renderMongo(mg) {
+  const badge = document.getElementById('mongo-badge');
+  const total = document.getElementById('mongo-total');
+  const cols  = document.getElementById('mongo-cols');
+  const tbody = document.querySelector('#mongo-col-list tbody');
+
+  if (!mg.reachable) {
+    badge.className   = 'badge badge--err';
+    badge.innerHTML   = '<span class="dot red"></span>Unreachable';
+    total.textContent = '\u2014';
+    cols.textContent  = '\u2014';
+    tbody.innerHTML   = '<tr><td colspan="2" class="error-text">' + (mg.error || 'Cannot connect to MongoDB') + '</td></tr>';
+    return;
+  }
+  badge.className = 'badge badge--ok';
+  badge.innerHTML = '<span class="dot green"></span>Connected';
+  total.textContent = mg.total_records.toLocaleString();
+  const names       = Object.keys(mg.collections).sort();
+  cols.textContent  = names.length;
+  tbody.innerHTML   = names.length
+    ? names.map(c => '<tr><td class="name">' + c + '</td><td class="count">' + mg.collections[c].toLocaleString() + '</td></tr>').join('')
+    : '<tr><td colspan="2" class="empty-msg">No collections — run the pipeline first.</td></tr>';
+}
+
+function setUnreachable(prefix) {
+  const badge = document.getElementById(prefix + '-badge');
+  badge.className = 'badge badge--err';
+  badge.innerHTML = '<span class="dot red"></span>Unreachable';
+}
+
+/* ── Templates ─────────────────────────────────────────────────── */
+const TEMPLATES = {
+  read:   { operation: 'READ',   entity: 'main_records', filters: {}, payload: {} },
+  create: { operation: 'CREATE', entity: 'main_records', filters: {}, payload: { name: 'Jane Doe', email: 'jane@example.com' } },
+  update: { operation: 'UPDATE', entity: 'main_records', filters: { record_id: 1 }, payload: { email: 'updated@example.com' } },
+  delete: { operation: 'DELETE', entity: 'main_records', filters: { record_id: 1 }, payload: {} }
+};
+
+function fillTemplate(key) {
+  document.getElementById('query-input').value = JSON.stringify(TEMPLATES[key], null, 2);
+}
+
+/* ── Pipeline Operations ───────────────────────────────────────── */
+async function runPipeline(action) {
+  const count = document.getElementById('record-count').value;
+  const status = document.getElementById('query-status');
+  const btnInit = document.getElementById('btn-init');
+  const btnFetch = document.getElementById('btn-fetch');
+  const btnRun = document.getElementById('run-btn');
+
+  btnInit.disabled = true;
+  btnFetch.disabled = true;
+  btnRun.disabled = true;
+
+  status.textContent = 'Running ' + action + '\u2026 This may take a moment.';
+  document.getElementById('result-box').style.display = 'none';
+
+  try {
+    const res = await fetch(`/api/pipeline/${action}?count=${count}`, {
+      method: 'POST'
+    });
+    const data = await res.json();
+    showResult(res.ok ? 'ok' : 'err', action.toUpperCase() + ' Result (' + res.status + ')', JSON.stringify(data, null, 2));
+    if (res.ok) {
+        setTimeout(loadStats, 1000); // refresh stats after successful action
+    }
+  } catch (e) {
+    showResult('err', 'Network error', e.message);
+  } finally {
+    btnInit.disabled = false;
+    btnFetch.disabled = false;
+    btnRun.disabled = false;
+    status.textContent = '';
+  }
+}
+
+/* ── Execute query ─────────────────────────────────────────────── */
+async function runQuery() {
+  const btn    = document.getElementById('run-btn');
+  const status = document.getElementById('query-status');
+  const raw    = document.getElementById('query-input').value.trim();
+
+  let body;
+  try { body = JSON.parse(raw); }
+  catch { showResult('err', 'Invalid JSON', ''); return; }
+
+  btn.disabled = true;
+  status.textContent = 'Running\u2026';
+  document.getElementById('result-box').style.display = 'none';
+
+  try {
+    const res  = await fetch('/api/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+    const data = await res.json();
+    showResult(res.ok ? 'ok' : 'err', 'Result (' + res.status + ')', JSON.stringify(data, null, 2));
+  } catch (e) {
+    showResult('err', 'Network error', e.message);
+  } finally {
+    btn.disabled = false;
+    status.textContent = '';
+  }
+}
+
+function showResult(kind, labelText, text) {
+  const box = document.getElementById('result-box');
+  box.className = kind;
+  box.style.display = 'block';
+  document.getElementById('result-label').textContent = labelText;
+  document.getElementById('result-pre').textContent   = text;
+}
+
+function closeResult() {
+  document.getElementById('result-box').style.display = 'none';
+}
+
+/* ── Init ──────────────────────────────────────────────────────── */
+document.getElementById('refresh-btn').addEventListener('click', loadStats);
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>

@@ -122,7 +122,7 @@ def main():
         print(f"\n[SUCCESS] {QUERY_FILE} finalized.")
     else:
         print("\n[!] No valid schema provided.")
-        sys.exit(1) # Exit with error so main.py knows to stop
+        sys.exit(1) # Exit with error so orchestrator knows to stop
 
 if __name__ == "__main__":
     main()

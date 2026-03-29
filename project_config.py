@@ -25,7 +25,7 @@ MONGO_DB_NAME = "hybrid_db"
 
 # --- PostgreSQL ---
 PG_HOST = "localhost"
-PG_PORT = 5432
+PG_PORT = 5433
 PG_DB_NAME = "hybrid_db"
 PG_USER = "admin"
 PG_PASSWORD = "admin"

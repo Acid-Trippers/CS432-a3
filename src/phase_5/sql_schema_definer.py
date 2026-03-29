@@ -133,7 +133,12 @@ class SQLSchemaBuilder:
 
     def analyze_and_build(self):
         print("[*] Loading metadata...")
-        self.analyzer.load_schemas()
+        try:
+            self.analyzer.load_schemas()
+        except FileNotFoundError:
+            print("[*] Metadata not found. Skipping table generation until pipeline initializes.")
+            self.engine = create_engine(self.database_url, echo=False)
+            return
 
         print("[*] Building table hierarchy...")
         self.analyzer.build_table_hierarchy()
