@@ -68,43 +68,47 @@ Ensure you have the following installed on your machine:
 
 ### 3. Booting Up the Environment
 
-This project includes an environment bootstrapper. Start the PostgreSQL, MongoDB instances, and network bridge using the helper script:
+Start the PostgreSQL, MongoDB instances, and network bridge using Docker Compose:
 
 ```powershell
-python starter.py start
+docker-compose up -d
 ```
 
-_(When finished ie after ingestion and querying, before ending the session don't forget to run `python starter.py end` to shut down the containers cleanly)._
+### 4. Running the Pipeline & Dashboard
 
-### 4. Running The Initialisation Pipeline
+The pipeline orchestration and CRUD operations are now hosted natively within a FastAPI backend dashboard. 
 
-To orchestrate a clean environment setup, perform a DB wipe, and spin up an entirely fresh pipeline with the primary API dataset (defaults to 1000 items, or you can supply your count):
+Start the dashboard server:
 
 ```powershell
-python main.py initialise 500
+python dashboard/run.py
 ```
 
-This triggers **Phase 1 through Phase 5**, creating SQL table schema relationships, MongoDB clusters, and loading that batch automatically!
+This launches the dashboard on **[http://localhost:8080](http://localhost:8080)**.
+_Port 8080 was chosen to avoid conflicts with existing services (8000 = data generator API, 5432 = PostgreSQL, 27017 = MongoDB)._
 
-### 5. Fetching & Incremental Sync (Batched Processing)
+### 5. Orchestrating the Platform via the Dashboard
 
-Once initialized, if you want the Database intelligence layer to ingest an additional X records and automatically adjust normalizations dynamically:
+Navigate to the Web UI to interact with the databases. The backend exposes endpoints that previously ran as CLI scripts:
+
+- **Initialise (`POST /api/pipeline/initialise`)**: Wipes databases, establishes normalized SQL tables, creates Mongo clusters, and ingests/routes fresh data (Phase 1-5).
+- **Fetch (`POST /api/pipeline/fetch`)**: Incrementally ingests additional records, adapting dynamic schemas, updating intelligence, and routing appending data.
+- **Query (`POST /api/query`)**: Run read, insert, update, or delete records globally across databases, directly from the Dashboard JSON Editor. The system matches properties with the generated `metadata.json` and routes sub-queries directly to the correct database layer concurrently.
+
+### 7. Running the Dashboard
+
+The web dashboard provides a browser-based interface for monitoring session status and running CRUD queries without using the CLI.
+
+> **Prerequisite:** The Docker services must be running before starting the dashboard. You can initialize the database schema directly from the dashboard UI.
 
 ```powershell
-python main.py fetch 200
+python dashboard/run.py
 ```
 
-_(The system keeps track of progress checkpoints and correctly handles appends or adaptations via the evolution suite)_.
+This launches the dashboard on **[http://localhost:8080](http://localhost:8080)** via uvicorn.  
+Port 8080 was chosen to avoid conflicts with existing services (8000 = data generator API, 5432 = PostgreSQL, 27017 = MongoDB).
 
-### 6. Executing CRUD Operations Across Infrastructure
-
-Use the hybrid query engine to read, insert, update, or delete records globally across databases!
-
-```powershell
-python main.py query
-```
-
-The system will display an interactive CLI UI via `CRUD_json_reader.py` allowing you to draft your data operation seamlessly. It then compiles the internal instruction, matches properties with the generated `metadata.json`, and routes the sub-queries directly to the correct database layer concurrently.
+The dashboard calls the same `query_runner()` logic used by the CLI — there is no separate query path.
 
 ---
 

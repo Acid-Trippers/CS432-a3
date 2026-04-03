@@ -6,19 +6,9 @@
 
 ---
 
-## Step 1 — Run the Pipeline Locally
+## Step 1 — Start Docker Containers
 
-This generates all the data files needed before inserting into the database.
-
-```powershell
-python main.py initialise 500
-```
-
-When prompted for schema, enter `1` to use the existing schema or `2` to paste a new one.
-
----
-
-## Step 2 — Start Docker Containers
+Ensure that the environment is running.
 
 ```powershell
 docker compose up -d
@@ -32,32 +22,19 @@ This starts all 4 containers:
 | `cs432_api` | Faker data API | 8000 |
 | `cs432_pipeline` | Python pipeline runner | — |
 
-Wait about 10 seconds for PostgreSQL to finish initializing before proceeding.
+## Step 2 — Run the Initialisation Pipeline
+
+Instead of running separate local scripts and CLI commands inside Docker, initialization is now entirely automated via the web Dashboard.
+
+1. Ensure the Dashboard is running: `python dashboard/run.py`
+2. Navigate to `http://localhost:8080/`
+3. Enter your desired record count in the pipeline controls and click **Initialise Pipeline**.
+
+This will automatically drop existing schemas, fetch data from the API, perform data analysis, and execute the SQL Pipeline to bulk insert the records effortlessly.
 
 ---
 
-## Step 3 — Insert Data into PostgreSQL
-
-```powershell
-docker compose exec pipeline python -m src.sql_pipeline run
-```
-
-Expected output:
-```
-[STEP 1] Initializing SQL Schema...
-[STEP 2] Loading SQL Data...
-[STEP 3] Bulk Inserting Records...
-[STEP 4] Archiving Processed Data...
-
-SQL PIPELINE SUMMARY
-  Successful Inserts : 500
-  Failed Inserts     : 0
-  Total Records in Database: 500
-```
-
----
-
-## Step 4 — Verify Data in PostgreSQL
+## Step 3 — Verify Data in PostgreSQL
 
 ### Connect to psql
 ```powershell
@@ -108,15 +85,13 @@ docker compose exec pipeline python -m src.sql_pipeline status
 
 ## Fetching More Records
 
-To ingest additional records into the existing database:
+To ingest additional records into the existing database smoothly without wiping it, simply use the **Fetch Records** functionality natively in the Dashboard UI.
 
-```powershell
-# Fetch 500 more records locally
-python main.py fetch 500
-
-# Insert the new batch into PostgreSQL
-docker compose exec pipeline python -m src.sql_pipeline run
+```http
+POST http://localhost:8080/api/pipeline/fetch?count=500
 ```
+
+The system will ingest the data, automatically run the classifier, and inject the records efficiently into PostgreSQL.
 
 ---
 
